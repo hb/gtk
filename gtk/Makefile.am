@@ -335,6 +335,7 @@ gtk_public_h_sources =          \
 	gtktreeviewcolumn.h	\
 	gtktypeutils.h		\
 	gtkuimanager.h		\
+	gtkundo.h		\
 	gtkvbbox.h		\
 	gtkvbox.h		\
 	gtkviewport.h		\
@@ -615,6 +616,7 @@ gtk_base_c_sources =            \
 	gtktypebuiltins.c	\
 	gtktypeutils.c		\
 	gtkuimanager.c		\
+	gtkundo.c		\
 	gtkvbbox.c		\
 	gtkvbox.c		\
 	gtkvolumebutton.c	\
