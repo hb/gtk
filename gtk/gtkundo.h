@@ -92,12 +92,16 @@ GType    gtk_undo_get_type (void) G_GNUC_CONST;
 
 GtkUndo* gtk_undo_new            (void);
 
+void     gtk_undo_register_set   (GtkUndo *undo,
+                                  const char *name,
+                                  const GtkUndoSet *set);
+
 void     gtk_undo_set_max_length (GtkUndo *buffer,
-                                           gint max_length);
+                                  gint max_length);
 
 gint     gtk_undo_get_max_length (GtkUndo *undo);
 
-void     gtk_undo_clear (GtkUndo *undo);
+void     gtk_undo_clear          (GtkUndo *undo);
 
 G_END_DECLS
 

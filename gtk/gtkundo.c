@@ -60,6 +60,7 @@ struct _GtkUndoPrivate
   GList *redo_stack;
   gint undo_length;
   gint redo_length;
+  GHashTable *method_hash;
 };
 
 typedef struct _GtkUndoEntry GtkUndoEntry;
@@ -170,6 +171,13 @@ free_last_entry (GtkUndo *undo)
   change_len_undo(undo, -1);
 }
 
+static void destroy_undoset(gpointer data)
+{
+  GtkUndoSet *set = data;
+  g_free(set->description);
+  g_free(set);
+}
+
 /* --------------------------------------------------------------------------------
  *
  */
@@ -186,11 +194,16 @@ gtk_undo_init (GtkUndo *undo)
   pv->redo_stack = NULL;
   pv->undo_length = 0;
   pv->redo_length = 0;
+  pv->method_hash = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, destroy_undoset);
 }
 
 static void
 gtk_undo_finalize (GObject *obj)
 {
+  GtkUndo *undo = GTK_UNDO (obj);
+
+  gtk_undo_clear (undo);
+  g_hash_table_destroy (undo->priv->method_hash);
   G_OBJECT_CLASS (gtk_undo_parent_class)->finalize (obj);
 }
 
@@ -314,6 +327,49 @@ gtk_undo_class_init (GtkUndoClass *klass)
 /* --------------------------------------------------------------------------------
  *
  */
+
+/**
+ * gtk_undo_new:
+ *
+ * Create a new GtkUndo object.
+ *
+ * Return value: A new GtkUndo object.
+ *
+ * Since: 2.20
+ **/
+GtkUndo*
+gtk_undo_new (void)
+{
+  return g_object_new (GTK_TYPE_UNDO, NULL);
+}
+
+/**
+ * gtk_undo_new:
+ * @undo: a #GtkUndo
+ * @name: name for the set
+ * @set: the set
+ *
+ * Register a an undo set. A set is a collection of functions
+ * that deal with undo/redo operations.
+ *
+ * Since: 2.20
+ **/
+void
+gtk_undo_register_set (GtkUndo *undo, const char *name, const GtkUndoSet *set)
+{
+  GtkUndoSet *val;
+
+  g_return_if_fail (GTK_IS_UNDO(undo) && name && set);
+
+  /* add the set to the method hash if it's not present yet */
+  if (g_hash_table_lookup(undo->priv->method_hash, name))
+    g_warning ("A set with the name '%s' has already been registered. Overriding.\n", name);
+
+  val = g_new0 (GtkUndoSet, 1);
+  *val = *set;
+  val->description = g_strdup (set->description);
+  g_hash_table_insert (undo->priv->method_hash, g_strdup(name), val);
+}
 
 /**
  * gtk_undo_set_max_length:
