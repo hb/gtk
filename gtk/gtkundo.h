@@ -77,6 +77,17 @@ struct _GtkUndoClass
   void (*_gtk_reserved5) (void);
 };
 
+// TODO: documentation
+typedef struct _GtkUndoSet GtkUndoSet;
+struct _GtkUndoSet
+{
+  gchar *description;
+  gboolean (*do_undo) (gpointer);
+  gboolean (*do_redo) (gpointer);
+  void (*do_free) (gpointer);
+};
+
+
 GType    gtk_undo_get_type (void) G_GNUC_CONST;
 
 GtkUndo* gtk_undo_new            (void);
@@ -85,6 +96,8 @@ void     gtk_undo_set_max_length (GtkUndo *buffer,
                                            gint max_length);
 
 gint     gtk_undo_get_max_length (GtkUndo *undo);
+
+void     gtk_undo_clear (GtkUndo *undo);
 
 G_END_DECLS
 
