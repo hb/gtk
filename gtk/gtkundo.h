@@ -101,6 +101,14 @@ void     gtk_undo_add            (GtkUndo *undo,
                                   gpointer data,
                                   const gchar *description);
 
+void     gtk_undo_undo           (GtkUndo *undo);
+
+void     gtk_undo_redo           (GtkUndo *undo);
+
+gboolean gtk_undo_can_undo       (GtkUndo *undo);
+
+gboolean gtk_undo_can_redo       (GtkUndo *undo);
+
 void     gtk_undo_set_max_length (GtkUndo *buffer,
                                   gint max_length);
 

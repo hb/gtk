@@ -155,28 +155,82 @@ traverse_free_entry (GNode *node, gpointer data)
   return FALSE;
 }
 
+static void
+free_stack_entry (GList **stack, GList *element)
+{
+  if (!element || !element->data)
+    return;
+
+  g_node_traverse ((GNode*)element->data, G_POST_ORDER, G_TRAVERSE_LEAVES, -1, traverse_free_entry, NULL);
+  g_node_destroy (element->data);
+  *stack = g_list_delete_link (*stack, element);
+}
+
 /* Free last element of undo stack (usually because the stack
  * grew beyond its maximum length). */
 static void
 free_last_entry (GtkUndo *undo)
 {
-  GList *last;
-
-  last = g_list_last (undo->priv->undo_stack);
-  if (!last)
-    return;
-
-  g_node_traverse ((GNode*)last->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_free_entry, NULL);
-  g_node_destroy (last->data);
-  undo->priv->undo_stack = g_list_delete_link (undo->priv->undo_stack, last);
+  free_stack_entry (&(undo->priv->undo_stack), g_list_last (undo->priv->undo_stack));
   change_len_undo(undo, -1);
 }
 
-static void destroy_undoset(gpointer data)
+/* Free first element of undo stack (usually because an undo operation failed */
+static void
+free_first_entry (GtkUndo *undo, gboolean of_undo)
+{
+  if (of_undo) {
+    free_stack_entry (&(undo->priv->undo_stack), undo->priv->undo_stack);
+    change_len_undo(undo, -1);
+  }
+  else {
+    free_stack_entry (&(undo->priv->redo_stack), undo->priv->redo_stack);
+    change_len_redo(undo, -1);
+  }
+}
+
+static void
+destroy_undoset(gpointer data)
 {
   GtkUndoSet *set = data;
   g_free(set->description);
   g_free(set);
+}
+
+static gboolean
+traverse_undo_node (GNode *node, gpointer data)
+{
+  GtkUndoEntry *entry;
+  gpointer *success;
+
+  success = data;
+  entry = node->data;
+
+  /* call callabck function */
+  if (entry && entry->set && entry->set->do_undo) {
+    if (!entry->set->do_undo(entry->data))
+      *success = FALSE;
+  }
+
+  return FALSE;
+}
+
+static gboolean
+traverse_redo_node (GNode *node, gpointer data)
+{
+  GtkUndoEntry *entry;
+  gpointer *success;
+
+  success = data;
+  entry = node->data;
+
+  /* call callabck function */
+  if (entry && entry->set && entry->set->do_redo) {
+    if (!entry->set->do_redo(entry->data))
+      *success = FALSE;
+  }
+
+  return FALSE;
 }
 
 /* --------------------------------------------------------------------------------
@@ -390,7 +444,7 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
   GtkUndoSet *set;
   GtkUndoEntry *entry;
 
-  g_return_if_fail (undo && set_name);
+  g_return_if_fail (GTK_IS_UNDO (undo) && set_name);
 
   if (undo->priv->max_length == 0)
     return;
@@ -408,6 +462,110 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
   if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
     free_last_entry (undo);
   g_signal_emit (undo, signals[CHANGED], 0);
+}
+
+/**
+ * gtk_undo_undo:
+ * @undo: a #GtkUndo
+ *
+ * Undo the last operation.
+ *
+ * Since: 2.20
+ **/
+void
+gtk_undo_undo (GtkUndo *undo)
+{
+  gboolean success = TRUE;
+
+  g_return_if_fail (GTK_IS_UNDO (undo));
+
+  if (!gtk_undo_can_undo(undo)) {
+    g_warning("Cannot undo.\n");
+    return;
+  }
+
+  g_node_traverse (undo->priv->undo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_undo_node, &success);
+  if (success) {
+    /* move data to redo stack */
+    undo->priv->redo_stack = g_list_prepend (undo->priv->redo_stack, undo->priv->undo_stack->data);
+    change_len_redo (undo, 1);
+    undo->priv->undo_stack = g_list_delete_link (undo->priv->undo_stack, undo->priv->undo_stack);
+  }
+  else {
+    free_first_entry (undo, TRUE);
+    g_warning("undo operation failed\n");
+  }
+  change_len_undo(undo, -1);
+  g_signal_emit(undo, signals[CHANGED], 0);
+}
+
+/**
+ * gtk_undo_redo:
+ * @undo: a #GtkUndo
+ *
+ * Redo the last operation.
+ *
+ * Since: 2.20
+ **/
+void
+gtk_undo_redo (GtkUndo *undo)
+{
+  gboolean success;
+
+  g_return_if_fail (GTK_IS_UNDO (undo));
+
+  if (!gtk_undo_can_redo(undo)) {
+    g_warning("Cannot redo.\n");
+    return;
+  }
+
+  g_node_traverse (undo->priv->redo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_redo_node, &success);
+  if (success) {
+    /* move data back to undo stack */
+    undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, undo->priv->redo_stack);
+    change_len_undo (undo, 1);
+    undo->priv->redo_stack = g_list_delete_link (undo->priv->redo_stack, undo->priv->redo_stack);
+  }
+  else {
+    free_first_entry (undo, FALSE);
+    g_warning ("redo operation failed\n");
+  }
+  change_len_redo (undo, -1);
+  g_signal_emit(undo, signals[CHANGED], 0);
+}
+
+/**
+ * gtk_undo_can_undo:
+ * @undo: a #GtkUndo
+ *
+ * Check if there's an object on the undo stack that can be undone
+ *
+ * Return value: TRUE if an object can be undone, FALSE otherwise.
+ *
+ * Since: 2.20
+ **/
+gboolean
+gtk_undo_can_undo (GtkUndo *undo)
+{
+  g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
+  return (undo->priv->undo_stack != NULL);
+}
+
+/**
+ * gtk_undo_can_redo:
+ * @undo: a #GtkUndo
+ *
+ * Check if there's an object on the redo stack that can be undone
+ *
+ * Return value: TRUE if an object can be redone, FALSE otherwise.
+ *
+ * Since: 2.20
+ **/
+gboolean
+gtk_undo_can_redo (GtkUndo *undo)
+{
+  g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
+  return (undo->priv->redo_stack != NULL);
 }
 
 /**
