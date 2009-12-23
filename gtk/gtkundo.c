@@ -323,7 +323,7 @@ gtk_undo_class_init (GtkUndoClass *klass)
                                    g_param_spec_int ("max-length",
                                                      P_("Maximum length"),
                                                      P_("Maximum number of toplevel entries in the undo stack. -1 if no maximum"),
-                                   0, GTK_UNDO_MAX_SIZE, -1,
+                                   -1, GTK_UNDO_MAX_SIZE, -1,
                                    GTK_PARAM_READWRITE));
 
   /**
