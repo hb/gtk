@@ -203,6 +203,7 @@
 #include <gtk/gtktreeviewcolumn.h>
 #include <gtk/gtktypeutils.h>
 #include <gtk/gtkuimanager.h>
+#include <gtk/gtkundo.h>
 #include <gtk/gtkvbbox.h>
 #include <gtk/gtkvbox.h>
 #include <gtk/gtkversion.h>
