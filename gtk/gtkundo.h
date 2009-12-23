@@ -96,6 +96,11 @@ void     gtk_undo_register_set   (GtkUndo *undo,
                                   const char *name,
                                   const GtkUndoSet *set);
 
+void     gtk_undo_add            (GtkUndo *undo,
+                                  const char *set_name,
+                                  gpointer data,
+                                  const gchar *description);
+
 void     gtk_undo_set_max_length (GtkUndo *buffer,
                                   gint max_length);
 

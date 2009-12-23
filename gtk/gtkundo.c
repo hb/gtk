@@ -167,6 +167,7 @@ free_last_entry (GtkUndo *undo)
     return;
 
   g_node_traverse ((GNode*)last->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_free_entry, NULL);
+  g_node_destroy (last->data);
   undo->priv->undo_stack = g_list_delete_link (undo->priv->undo_stack, last);
   change_len_undo(undo, -1);
 }
@@ -349,7 +350,7 @@ gtk_undo_new (void)
  * @name: name for the set
  * @set: the set
  *
- * Register a an undo set. A set is a collection of functions
+ * Register an undo set. A set is a collection of functions
  * that deal with undo/redo operations.
  *
  * Since: 2.20
@@ -369,6 +370,44 @@ gtk_undo_register_set (GtkUndo *undo, const char *name, const GtkUndoSet *set)
   *val = *set;
   val->description = g_strdup (set->description);
   g_hash_table_insert (undo->priv->method_hash, g_strdup(name), val);
+}
+
+/**
+ * gtk_undo_add:
+ * @undo: a #GtkUndo
+ * @set_name: name of the set dealing with this data
+ * @data: the data of the set
+ * @description: a human-readable description of what this data does
+ *
+ * Add add an entry to the undo stack. The @set_name has to have
+ * been registered before with gtk_undo_register_set.
+ *
+ * Since: 2.20
+ **/
+void
+gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *description)
+{
+  GtkUndoSet *set;
+  GtkUndoEntry *entry;
+
+  g_return_if_fail (undo && set_name);
+
+  if (undo->priv->max_length == 0)
+    return;
+
+  set = g_hash_table_lookup (undo->priv->method_hash, set_name);
+  g_return_if_fail (set);
+
+  entry = g_new0 (GtkUndoEntry, 1);
+  entry->description = g_strdup (description);
+  entry->set = set;
+  entry->data = data;
+  undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, g_node_new (entry));
+  change_len_undo (undo, 1);
+  clear_redo (undo);
+  if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
+    free_last_entry (undo);
+  g_signal_emit (undo, signals[CHANGED], 0);
 }
 
 /**
