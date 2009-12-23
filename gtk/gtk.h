@@ -204,6 +204,7 @@
 #include <gtk/gtktypeutils.h>
 #include <gtk/gtkuimanager.h>
 #include <gtk/gtkundo.h>
+#include <gtk/gtkundoview.h>
 #include <gtk/gtkvbbox.h>
 #include <gtk/gtkvbox.h>
 #include <gtk/gtkversion.h>
