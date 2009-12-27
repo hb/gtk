@@ -83,10 +83,12 @@ static void
 free_entry (GtkUndoEntry *entry)
 {
   /* Call virtual functions for data entries */
-  g_return_if_fail(entry->set);
-  if (entry->set && entry->set->do_free && entry->data)
-    entry->set->do_free(entry->data);
-
+  if(entry->set) {
+    if (entry->set->do_free)
+      entry->set->do_free(entry->data);
+  }
+  else
+    g_print ("hhb: freeing a non-set entry\n"); // TODO
   g_free(entry->description);
   g_free(entry);
 }
@@ -115,6 +117,14 @@ change_len_redo(GtkUndo *undo, gint num)
     g_signal_emit (undo, signals[CAN_REDO], 0, FALSE);
 }
 
+static gboolean
+traverse_free_entry (GNode *node, gpointer data)
+{
+  if (node && node->data)
+    free_entry ((GtkUndoEntry*)node->data);
+  return FALSE;
+}
+
 /* Clear the undo stack */
 static void
 clear_undo (GtkUndo *undo)
@@ -124,9 +134,8 @@ clear_undo (GtkUndo *undo)
   change_len_undo (undo, -undo->priv->undo_length);
 
   for (walk = undo->priv->undo_stack; walk; walk = walk->next) {
-    GtkUndoEntry *entry = walk->data;
-    if (entry)
-      free_entry (entry);
+    g_node_traverse ((GNode*)walk->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_free_entry, NULL);
+    g_node_destroy (walk->data);
   }
   g_list_free (undo->priv->undo_stack);
   undo->priv->undo_stack = NULL;
@@ -140,19 +149,11 @@ clear_redo (GtkUndo *undo)
   change_len_redo (undo, -undo->priv->redo_length);
 
   for (walk = undo->priv->redo_stack; walk; walk = walk->next) {
-    GtkUndoEntry *entry = walk->data;
-    if (entry)
-      free_entry (entry);
+    g_node_traverse ((GNode*)walk->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_free_entry, NULL);
+    g_node_destroy (walk->data);
   }
   g_list_free (undo->priv->redo_stack);
   undo->priv->redo_stack = NULL;
-}
-
-static gboolean
-traverse_free_entry (GNode *node, gpointer data)
-{
-  free_entry ((GtkUndoEntry*)node->data);
-  return FALSE;
 }
 
 static void
@@ -161,7 +162,7 @@ free_stack_entry (GList **stack, GList *element)
   if (!element || !element->data)
     return;
 
-  g_node_traverse ((GNode*)element->data, G_POST_ORDER, G_TRAVERSE_LEAVES, -1, traverse_free_entry, NULL);
+  g_node_traverse ((GNode*)element->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_free_entry, NULL);
   g_node_destroy (element->data);
   *stack = g_list_delete_link (*stack, element);
 }
@@ -275,10 +276,9 @@ get_descriptions_from_stack (GList *stack)
   GList *walk;
 
   store = gtk_tree_store_new (1, G_TYPE_STRING);
-  for (walk = stack; walk; walk = walk->next) {
-    GNode *node = walk->data;
-    get_descriptions_from_stack_add_node (store, node->data, NULL);
-  }
+  for (walk = stack; walk; walk = walk->next)
+    get_descriptions_from_stack_add_node (store, walk->data, NULL);
+
   return store;
 }
 
@@ -463,16 +463,16 @@ gtk_undo_register_set (GtkUndo *undo, const char *name, const GtkUndoSet *set)
 {
   GtkUndoSet *val;
 
-  g_return_if_fail (GTK_IS_UNDO(undo) && name && set);
+  g_return_if_fail (GTK_IS_UNDO (undo) && name && set);
 
   /* add the set to the method hash if it's not present yet */
-  if (g_hash_table_lookup(undo->priv->method_hash, name))
+  if (g_hash_table_lookup (undo->priv->method_hash, name))
     g_warning ("A set with the name '%s' has already been registered. Overriding.\n", name);
 
   val = g_new0 (GtkUndoSet, 1);
   *val = *set;
   val->description = g_strdup (set->description);
-  g_hash_table_insert (undo->priv->method_hash, g_strdup(name), val);
+  g_hash_table_insert (undo->priv->method_hash, g_strdup (name), val);
 }
 
 /**
@@ -574,7 +574,7 @@ gtk_undo_redo (GtkUndo *undo)
   g_node_traverse (undo->priv->redo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_redo_node, &success);
   if (success) {
     /* move data back to undo stack */
-    undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, undo->priv->redo_stack);
+    undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, undo->priv->redo_stack->data);
     change_len_undo (undo, 1);
     undo->priv->redo_stack = g_list_delete_link (undo->priv->redo_stack, undo->priv->redo_stack);
   }
