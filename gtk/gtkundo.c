@@ -485,23 +485,27 @@ gtk_undo_register_set (GtkUndo *undo, const char *name, const GtkUndoSet *set)
  * Add add an entry to the undo stack. The @set_name has to have
  * been registered before with gtk_undo_register_set.
  *
+ * Return value: TRUE if the adding was successful, FALSE otherwise
+ *               (e.g. if a set with the given @set_name was not registered,
+ *               or the maximum allowed length of the undo stack is zero)
+ *
  * Since: 2.20
  **/
-void
+gboolean
 gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *description)
 {
   GtkUndoSet *set;
   GtkUndoEntry *entry;
 
-  g_return_if_fail (GTK_IS_UNDO (undo) && set_name);
+  g_return_val_if_fail (GTK_IS_UNDO (undo) && set_name, FALSE);
 
   if (undo->priv->max_length == 0)
-    return;
+    return FALSE;
 
   set = g_hash_table_lookup (undo->priv->method_hash, set_name);
   if (!set) {
     g_warning ("A set with the name '%s' has not been registered\n", set_name);
-    return;
+    return FALSE;
   }
 
   entry = g_new0 (GtkUndoEntry, 1);
@@ -514,6 +518,7 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
   if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
     free_last_entry (undo);
   g_signal_emit (undo, signals[CHANGED], 0);
+  return TRUE;
 }
 
 /**
