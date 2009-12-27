@@ -61,6 +61,7 @@ struct _GtkUndoPrivate
   gint undo_length;
   gint redo_length;
   GHashTable *method_hash;
+  guint group_depth;
 };
 
 typedef struct _GtkUndoEntry GtkUndoEntry;
@@ -299,6 +300,7 @@ gtk_undo_init (GtkUndo *undo)
   pv->undo_length = 0;
   pv->redo_length = 0;
   pv->method_hash = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, destroy_undoset);
+  pv->group_depth = 0;
 }
 
 static void
@@ -527,18 +529,20 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
  *
  * Undo the last operation.
  *
+ * Return value: TRUE if undo was performed.
+ *
  * Since: 2.20
  **/
-void
+gboolean
 gtk_undo_undo (GtkUndo *undo)
 {
   gboolean success = TRUE;
 
-  g_return_if_fail (GTK_IS_UNDO (undo));
+  g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
 
   if (!gtk_undo_can_undo(undo)) {
     g_warning("Cannot undo.\n");
-    return;
+    return FALSE;
   }
 
   g_node_traverse (undo->priv->undo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_undo_node, &success);
@@ -554,6 +558,7 @@ gtk_undo_undo (GtkUndo *undo)
   }
   change_len_undo(undo, -1);
   g_signal_emit(undo, signals[CHANGED], 0);
+  return TRUE;
 }
 
 /**
@@ -562,18 +567,20 @@ gtk_undo_undo (GtkUndo *undo)
  *
  * Redo the last operation.
  *
+ * Return value: TRUE if redo was successful.
+ *
  * Since: 2.20
  **/
-void
+gboolean
 gtk_undo_redo (GtkUndo *undo)
 {
   gboolean success;
 
-  g_return_if_fail (GTK_IS_UNDO (undo));
+  g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
 
   if (!gtk_undo_can_redo(undo)) {
     g_warning("Cannot redo.\n");
-    return;
+    return FALSE;
   }
 
   g_node_traverse (undo->priv->redo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_redo_node, &success);
@@ -589,6 +596,7 @@ gtk_undo_redo (GtkUndo *undo)
   }
   change_len_redo (undo, -1);
   g_signal_emit(undo, signals[CHANGED], 0);
+  return TRUE;
 }
 
 /**
@@ -605,7 +613,7 @@ gboolean
 gtk_undo_can_undo (GtkUndo *undo)
 {
   g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
-  return (undo->priv->undo_stack != NULL);
+  return ((undo->priv->undo_stack != NULL) && (undo->priv->group_depth == 0));
 }
 
 /**
@@ -622,7 +630,7 @@ gboolean
 gtk_undo_can_redo (GtkUndo *undo)
 {
   g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
-  return (undo->priv->redo_stack != NULL);
+  return ((undo->priv->redo_stack != NULL) && (undo->priv->group_depth == 0));
 }
 
 /**
@@ -642,6 +650,11 @@ gtk_undo_set_max_length (GtkUndo *undo,
                          gint     max_length)
 {
   g_return_if_fail (GTK_IS_UNDO (undo));
+
+  if (undo->priv->group_depth != 0) {
+    g_warning ("Currently in group add mode. Cannot modify maximum length.\n");
+    return;
+  }
 
   max_length = CLAMP (max_length, 0, GTK_UNDO_MAX_SIZE);
 
@@ -681,14 +694,21 @@ gtk_undo_get_max_length (GtkUndo *undo)
  *
  * Clears the undo stack.
  *
+ * Return value: TRUE if clearing was successful. Clearing can
+ * fail e.g. if the stack is currently in group add mode.
+ *
  * Since: 2.20
  */
-void
+gboolean
 gtk_undo_clear (GtkUndo *undo)
 {
   gboolean something_changed;
 
-  g_return_if_fail (GTK_IS_UNDO (undo));
+  g_return_val_if_fail (GTK_IS_UNDO (undo), FALSE);
+
+  if (undo->priv->group_depth != 0) {
+    return FALSE;
+  }
 
   if(undo->priv->undo_stack || undo->priv->redo_stack)
     something_changed = TRUE;
@@ -700,6 +720,54 @@ gtk_undo_clear (GtkUndo *undo)
 
   if (something_changed)
     g_signal_emit (undo, signals[CHANGED], 0);
+  return TRUE;
+}
+
+/**
+ * gtk_undo_start_group:
+ * @undo: a #GtkUndo
+ * @description: a human readable description of what the group will undo
+ *
+ * Starts an undo group. The group must be ended with gtk_undo_end_group
+ * before anything can be undone. Groups can be nested, however.
+ *
+ * Since: 2.20
+ */
+void
+gtk_undo_start_group (GtkUndo *undo, const gchar *description)
+{
+  //TODO
+}
+
+/**
+ * gtk_undo_end_group:
+ * @undo: a #GtkUndo
+ *
+ * Ends the innermost undo group.
+ *
+ * Since: 2.20
+ */
+void
+gtk_undo_end_group (GtkUndo *undo)
+{
+  // TODO
+}
+
+/**
+ * gtk_undo_is_in_group:
+ * @undo: a #GtkUndo
+ *
+ * Checks whether the stack is currently in group add mode (that is,
+ * gtk_undo_start_group has been called more often than gtk_undo_end_group).
+ *
+ * Return value: TRUE if stack is in group add mode.
+ *
+ * Since: 2.20
+ */
+gboolean
+gtk_undo_is_in_group (GtkUndo *undo)
+{
+  return (undo->priv->group_depth != 0);
 }
 
 /**

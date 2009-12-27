@@ -102,9 +102,9 @@ gboolean gtk_undo_add            (GtkUndo *undo,
                                   gpointer data,
                                   const gchar *description);
 
-void     gtk_undo_undo           (GtkUndo *undo);
+gboolean gtk_undo_undo           (GtkUndo *undo);
 
-void     gtk_undo_redo           (GtkUndo *undo);
+gboolean gtk_undo_redo           (GtkUndo *undo);
 
 gboolean gtk_undo_can_undo       (GtkUndo *undo);
 
@@ -115,7 +115,13 @@ void     gtk_undo_set_max_length (GtkUndo *buffer,
 
 gint     gtk_undo_get_max_length (GtkUndo *undo);
 
-void     gtk_undo_clear          (GtkUndo *undo);
+gboolean gtk_undo_clear          (GtkUndo *undo);
+
+void     gtk_undo_start_group    (GtkUndo *undo, const gchar *description);
+
+void     gtk_undo_end_group      (GtkUndo *undo);
+
+gboolean gtk_undo_is_in_group    (GtkUndo *undo);
 
 GtkTreeStore* gtk_undo_get_undo_descriptions (GtkUndo *undo);
 
