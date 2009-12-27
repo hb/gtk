@@ -70,7 +70,23 @@ G_DEFINE_TYPE (GtkUndoView, gtk_undo_view, GTK_TYPE_VBOX);
 static void
 update_list_displays(GtkUndoView *view)
 {
-  // TODO
+  GtkTreeStore *store;
+
+  g_return_if_fail (GTK_IS_UNDO (view->priv->undo));
+
+  store = gtk_undo_get_undo_descriptions (view->priv->undo);
+  if (store) {
+    gtk_tree_view_set_model (GTK_TREE_VIEW (view->priv->undo_view), GTK_TREE_MODEL (store));
+    g_object_unref (store);
+  }
+
+  store = gtk_undo_get_redo_descriptions (view->priv->undo);
+  if (store) {
+    gtk_tree_view_set_model (GTK_TREE_VIEW (view->priv->redo_view), GTK_TREE_MODEL (store));
+    g_object_unref (store);
+  }
+
+  gtk_widget_set_sensitive (view->priv->clear_button, gtk_undo_can_undo(view->priv->undo) || gtk_undo_can_redo(view->priv->undo));
 }
 
 static GtkWidget*
