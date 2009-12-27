@@ -233,6 +233,55 @@ traverse_redo_node (GNode *node, gpointer data)
   return FALSE;
 }
 
+/* get best-fitting description for an entry. This is the
+ * description of the entry, or the description of the associated
+ * set, if no entry-description is available, or a dummy string
+ * if no set description is available either. */
+static char*
+get_entry_description (GtkUndoEntry *entry)
+{
+  gchar *desc;
+
+  if(entry->description)
+    desc = entry->description;
+  else if(entry->set && entry->set->description)
+    desc = entry->set->description;
+  else
+    desc = N_("<no description available>");
+  return desc;
+}
+
+static void
+get_descriptions_from_stack_add_node (GtkTreeStore *store, GNode *node, GtkTreeIter *parent_iter)
+{
+  GtkTreeIter iter;
+  guint n_children, ii;
+
+  gtk_tree_store_append (store, &iter, parent_iter);
+  gtk_tree_store_set (store, &iter, 0, get_entry_description (node->data), -1);
+
+  n_children = g_node_n_children (node);
+  for (ii = 0; ii < n_children; ii++) {
+    GNode *child;
+    child = g_node_nth_child (node, ii);
+    get_descriptions_from_stack_add_node (store, child, &iter);
+  }
+}
+
+static GtkTreeStore*
+get_descriptions_from_stack (GList *stack)
+{
+  GtkTreeStore *store;
+  GList *walk;
+
+  store = gtk_tree_store_new (1, G_TYPE_STRING);
+  for (walk = stack; walk; walk = walk->next) {
+    GNode *node = walk->data;
+    get_descriptions_from_stack_add_node (store, node->data, NULL);
+  }
+  return store;
+}
+
 /* --------------------------------------------------------------------------------
  *
  */
@@ -450,7 +499,10 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
     return;
 
   set = g_hash_table_lookup (undo->priv->method_hash, set_name);
-  g_return_if_fail (set);
+  if (!set) {
+    g_warning ("A set with the name '%s' has not been registered\n", set_name);
+    return;
+  }
 
   entry = g_new0 (GtkUndoEntry, 1);
   entry->description = g_strdup (description);
@@ -643,4 +695,38 @@ gtk_undo_clear (GtkUndo *undo)
 
   if (something_changed)
     g_signal_emit (undo, signals[CHANGED], 0);
+}
+
+/**
+ * gtk_undo_get_undo_descriptions:
+ * @undo: a #GtkUndo
+ *
+ * Get descriptions of the entries of the undo stack
+ *
+ * Return value: A GtkTreeModel of description strings.
+ *
+ * Since: 2.20
+ */
+GtkTreeStore*
+gtk_undo_get_undo_descriptions (GtkUndo *undo)
+{
+  g_return_val_if_fail (GTK_IS_UNDO (undo), NULL);
+  return get_descriptions_from_stack (undo->priv->undo_stack);
+}
+
+/**
+ * gtk_undo_get_redo_descriptions:
+ * @undo: a #GtkUndo
+ *
+ * Get descriptions of the entries of the redo stack
+ *
+ * Return value: A GtkTreeModel of description strings.
+ *
+ * Since: 2.20
+ */
+GtkTreeStore*
+gtk_undo_get_redo_descriptions (GtkUndo *undo)
+{
+  g_return_val_if_fail (GTK_IS_UNDO (undo), NULL);
+  return get_descriptions_from_stack (undo->priv->redo_stack);
 }

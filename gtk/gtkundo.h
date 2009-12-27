@@ -25,7 +25,8 @@
 #ifndef __GTK_UNDO_H__
 #define __GTK_UNDO_H__
 
-#include <glib-object.h>
+#include <gtk/gtktreestore.h>
+
 
 G_BEGIN_DECLS
 
@@ -115,6 +116,10 @@ void     gtk_undo_set_max_length (GtkUndo *buffer,
 gint     gtk_undo_get_max_length (GtkUndo *undo);
 
 void     gtk_undo_clear          (GtkUndo *undo);
+
+GtkTreeStore* gtk_undo_get_undo_descriptions (GtkUndo *undo);
+
+GtkTreeStore* gtk_undo_get_redo_descriptions (GtkUndo *undo);
 
 G_END_DECLS
 
