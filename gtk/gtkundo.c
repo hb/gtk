@@ -235,6 +235,13 @@ traverse_redo_node (GNode *node, gpointer data)
   return FALSE;
 }
 
+static gboolean
+traverse_reverse_children (GNode *node, gpointer data)
+{
+  g_node_reverse_children (node);
+  return FALSE;
+}
+
 /* get best-fitting description for an entry. This is the
  * description of the entry, or the description of the associated
  * set, if no entry-description is available, or a dummy string
@@ -281,6 +288,16 @@ get_descriptions_from_stack (GList *stack)
     get_descriptions_from_stack_add_node (store, walk->data, NULL);
 
   return store;
+}
+
+static GNode*
+get_node_level (GNode *root, guint depth)
+{
+  GNode *child;
+  depth--;
+  for(child = root; depth; depth--)
+    child = g_node_first_child(child);
+  return child;
 }
 
 /* --------------------------------------------------------------------------------
@@ -514,12 +531,23 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
   entry->description = g_strdup (description);
   entry->set = set;
   entry->data = data;
-  undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, g_node_new (entry));
-  change_len_undo (undo, 1);
-  clear_redo (undo);
-  if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
-    free_last_entry (undo);
-  g_signal_emit (undo, signals[CHANGED], 0);
+
+  if (!undo->priv->group_depth) {
+    undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, g_node_new (entry));
+    change_len_undo (undo, 1);
+    clear_redo (undo);
+    if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
+      free_last_entry (undo);
+    g_signal_emit (undo, signals[CHANGED], 0);
+  }
+  else {
+    if (!(undo->priv->undo_stack && undo->priv->undo_stack->data)) {
+      g_warning ("Could not add grouped entry.\n");
+      return FALSE;
+    }
+    g_node_insert (get_node_level (undo->priv->undo_stack->data, undo->priv->group_depth), 0, g_node_new (entry));
+  }
+
   return TRUE;
 }
 
@@ -548,6 +576,7 @@ gtk_undo_undo (GtkUndo *undo)
   g_node_traverse (undo->priv->undo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_undo_node, &success);
   if (success) {
     /* move data to redo stack */
+    g_node_traverse (undo->priv->undo_stack->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_reverse_children, NULL);
     undo->priv->redo_stack = g_list_prepend (undo->priv->redo_stack, undo->priv->undo_stack->data);
     change_len_redo (undo, 1);
     undo->priv->undo_stack = g_list_delete_link (undo->priv->undo_stack, undo->priv->undo_stack);
@@ -586,6 +615,7 @@ gtk_undo_redo (GtkUndo *undo)
   g_node_traverse (undo->priv->redo_stack->data, G_PRE_ORDER, G_TRAVERSE_LEAVES, -1, traverse_redo_node, &success);
   if (success) {
     /* move data back to undo stack */
+    g_node_traverse (undo->priv->redo_stack->data, G_POST_ORDER, G_TRAVERSE_ALL, -1, traverse_reverse_children, NULL);
     undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, undo->priv->redo_stack->data);
     change_len_undo (undo, 1);
     undo->priv->redo_stack = g_list_delete_link (undo->priv->redo_stack, undo->priv->redo_stack);
@@ -736,7 +766,27 @@ gtk_undo_clear (GtkUndo *undo)
 void
 gtk_undo_start_group (GtkUndo *undo, const gchar *description)
 {
-  //TODO
+  GtkUndoEntry *entry;
+
+  entry = g_new0 (GtkUndoEntry, 1);
+  entry->description = g_strdup(description);
+  entry->set = NULL;
+  entry->data = NULL;
+
+  if (undo->priv->group_depth == 0) {
+    // new toplevel entry
+    undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, g_node_new (entry));
+  }
+  else {
+    // descend into tree at the top of the stack
+    if (!(undo->priv->undo_stack && undo->priv->undo_stack->data)) {
+      g_warning ("Could not start group.\n");
+      return;
+    }
+    g_node_insert (get_node_level (undo->priv->undo_stack->data, undo->priv->group_depth), 0, g_node_new (entry));
+  }
+
+  undo->priv->group_depth++;
 }
 
 /**
@@ -750,7 +800,15 @@ gtk_undo_start_group (GtkUndo *undo, const gchar *description)
 void
 gtk_undo_end_group (GtkUndo *undo)
 {
-  // TODO
+  g_return_if_fail (undo->priv->group_depth > 0);
+  undo->priv->group_depth--;
+  if (undo->priv->group_depth == 0) {
+    change_len_undo (undo, 1);
+    clear_redo (undo);
+    if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
+      free_last_entry (undo);
+    g_signal_emit (undo, signals[CHANGED], 0);
+  }
 }
 
 /**
