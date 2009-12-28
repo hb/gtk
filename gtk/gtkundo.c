@@ -88,8 +88,6 @@ free_entry (GtkUndoEntry *entry)
     if (entry->set->do_free)
       entry->set->do_free(entry->data);
   }
-  else
-    g_print ("hhb: freeing a non-set entry\n"); // TODO
   g_free(entry->description);
   g_free(entry);
 }
@@ -580,12 +578,12 @@ gtk_undo_undo (GtkUndo *undo)
     undo->priv->redo_stack = g_list_prepend (undo->priv->redo_stack, undo->priv->undo_stack->data);
     change_len_redo (undo, 1);
     undo->priv->undo_stack = g_list_delete_link (undo->priv->undo_stack, undo->priv->undo_stack);
+    change_len_undo(undo, -1);
   }
   else {
     free_first_entry (undo, TRUE);
     g_warning("undo operation failed\n");
   }
-  change_len_undo(undo, -1);
   g_signal_emit(undo, signals[CHANGED], 0);
   return TRUE;
 }
@@ -619,12 +617,12 @@ gtk_undo_redo (GtkUndo *undo)
     undo->priv->undo_stack = g_list_prepend (undo->priv->undo_stack, undo->priv->redo_stack->data);
     change_len_undo (undo, 1);
     undo->priv->redo_stack = g_list_delete_link (undo->priv->redo_stack, undo->priv->redo_stack);
+    change_len_redo (undo, -1);
   }
   else {
     free_first_entry (undo, FALSE);
     g_warning ("redo operation failed\n");
   }
-  change_len_redo (undo, -1);
   g_signal_emit(undo, signals[CHANGED], 0);
   return TRUE;
 }
