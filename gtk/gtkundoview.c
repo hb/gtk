@@ -30,6 +30,8 @@
 #include "gtktreeviewcolumn.h"
 #include "gtktreeselection.h"
 #include "gtkscrolledwindow.h"
+#include "gtkinfobar.h"
+#include "gtklabel.h"
 
 /**
  * SECTION:gtkundoview
@@ -58,6 +60,8 @@ struct _GtkUndoViewPrivate
 
   GtkWidget *undo_view;
   GtkWidget *redo_view;
+
+  GtkWidget *info_bar;
 };
 
 G_DEFINE_TYPE (GtkUndoView, gtk_undo_view, GTK_TYPE_VBOX);
@@ -87,6 +91,11 @@ update_list_displays(GtkUndoView *view)
   }
 
   gtk_widget_set_sensitive (view->priv->clear_button, gtk_undo_can_undo(view->priv->undo) || gtk_undo_can_redo(view->priv->undo));
+
+  if (gtk_undo_is_in_group (view->priv->undo))
+    gtk_widget_show (view->priv->info_bar);
+  else
+    gtk_widget_hide (view->priv->info_bar);
 }
 
 static GtkWidget*
@@ -131,6 +140,17 @@ create_list_display(GtkUndoView *view, gboolean undo_side)
   return vbox;
 }
 
+static void
+on_info_bar_show_signal (GtkWidget *info_bar, gpointer data)
+{
+  GtkUndoView *view;
+  view = data;
+  if (view->priv->undo && gtk_undo_is_in_group (view->priv->undo))
+    gtk_widget_show (info_bar);
+  else
+    gtk_widget_hide (info_bar);
+}
+
 /* --------------------------------------------------------------------------------
  *
  */
@@ -169,7 +189,6 @@ gtk_undo_view_init (GtkUndoView *view)
 
   gtk_box_pack_start (GTK_BOX (view), hbox, FALSE, FALSE, 0);
   gtk_widget_show_all (hbox);
-  gtk_widget_hide (pv->clear_button);
 
   /* paned */
   paned = gtk_hpaned_new ();
@@ -185,6 +204,12 @@ gtk_undo_view_init (GtkUndoView *view)
   gtk_paned_add2 (GTK_PANED (paned), list_display);
 
   gtk_box_pack_start (GTK_BOX (view), paned, TRUE, TRUE, 0);
+
+  /* info bar */
+  pv->info_bar = gtk_info_bar_new ();
+  g_signal_connect_after (G_OBJECT (pv->info_bar), "show", G_CALLBACK (on_info_bar_show_signal), view);
+  gtk_container_add (GTK_CONTAINER (gtk_info_bar_get_content_area (GTK_INFO_BAR (pv->info_bar))), gtk_label_new (N_("Currently in group add mode")));
+  gtk_box_pack_start (GTK_BOX (view), pv->info_bar, FALSE, FALSE, 0);
 
   gtk_widget_show_all (GTK_WIDGET (view));
 }
