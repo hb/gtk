@@ -689,8 +689,15 @@ gtk_undo_set_max_length (GtkUndo *undo,
   if (max_length != undo->priv->max_length) {
     /* truncate list if necessary */
     if (max_length != -1) {
+      gboolean something_changed;
+      if (undo->priv->undo_length > max_length)
+        something_changed = TRUE;
+      else
+        something_changed = FALSE;
       while (undo->priv->undo_length > max_length)
         free_last_entry (undo);
+      if (something_changed)
+        g_signal_emit (undo, signals[CHANGED], 0);
     }
     undo->priv->max_length = max_length;
     g_object_notify (G_OBJECT (undo), "max-length");
