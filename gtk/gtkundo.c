@@ -684,7 +684,7 @@ gtk_undo_set_max_length (GtkUndo *undo,
     return;
   }
 
-  max_length = CLAMP (max_length, 0, GTK_UNDO_MAX_SIZE);
+  max_length = CLAMP (max_length, -1, GTK_UNDO_MAX_SIZE);
 
   if (max_length != undo->priv->max_length) {
     /* truncate list if necessary */
