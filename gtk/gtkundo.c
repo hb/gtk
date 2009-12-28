@@ -785,6 +785,9 @@ gtk_undo_start_group (GtkUndo *undo, const gchar *description)
   }
 
   undo->priv->group_depth++;
+  // if group add mode was just started, emit changed signal
+  if (undo->priv->group_depth == 1)
+    g_signal_emit (undo, signals[CHANGED], 0);
 }
 
 /**
@@ -824,6 +827,23 @@ gboolean
 gtk_undo_is_in_group (GtkUndo *undo)
 {
   return (undo->priv->group_depth != 0);
+}
+
+/**
+ * gtk_undo_get_group_depth:
+ * @undo: a #GtkUndo
+ *
+ * Returns the current group depth (that is, the number of times that
+ * gtk_undo_start_group has been called more often than gtk_undo_end_group).
+ *
+ * Return value: Group depth.
+ *
+ * Since: 2.20
+ */
+guint
+gtk_undo_get_group_depth (GtkUndo *undo)
+{
+  return undo->priv->group_depth;
 }
 
 /**

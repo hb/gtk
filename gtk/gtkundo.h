@@ -123,6 +123,8 @@ void     gtk_undo_end_group      (GtkUndo *undo);
 
 gboolean gtk_undo_is_in_group    (GtkUndo *undo);
 
+guint    gtk_undo_get_group_depth (GtkUndo *undo);
+
 GtkTreeStore* gtk_undo_get_undo_descriptions (GtkUndo *undo);
 
 GtkTreeStore* gtk_undo_get_redo_descriptions (GtkUndo *undo);
