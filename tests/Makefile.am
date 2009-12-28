@@ -93,7 +93,8 @@ noinst_PROGRAMS =  $(TEST_PROGS)	\
 	testactions			\
 	testgrouping			\
 	testtooltips			\
-	testvolumebutton
+	testvolumebutton		\
+	testundo
 
 if HAVE_CXX
 noinst_PROGRAMS += autotestkeywords
@@ -170,6 +171,7 @@ testgrouping_DEPENDENCIES = $(TEST_DEPS)
 testtooltips_DEPENDENCIES = $(TEST_DEPS)
 testvolumebutton_DEPENDENCIES = $(TEST_DEPS)
 testwindows_DEPENDENCIES = $(TEST_DEPS)
+testundo_DEPENDENCIES = $(TEST_DEPS)
 
 flicker_LDADD = $(LDADDS)
 simple_LDADD = $(LDADDS)
@@ -240,6 +242,7 @@ testgrouping_LDADD = $(LDADDS)
 testtooltips_LDADD = $(LDADDS)
 testvolumebutton_LDADD = $(LDADDS)
 testwindows_LDADD = $(LDADDS)
+testundo_LDADD = $(LDADDS)
 
 
 testentrycompletion_SOURCES = 	\
@@ -342,6 +345,9 @@ testoffscreen_SOURCES = 	\
 
 testwindow_SOURCES = 	\
 	testwindows.c
+
+testundo_SOURCES =		\
+	testundo.c
 
 EXTRA_DIST += 			\
 	prop-editor.h		\
