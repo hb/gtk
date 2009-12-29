@@ -122,6 +122,8 @@ create_main_window (GtkUndo *undo)
   GtkWidget *button;
   GtkWidget *sep;
   GtkWidget *spinner;
+  GtkActionGroup *action_group;
+  GtkUIManager *ui_manager;
 
   win = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_widget_set_size_request (win, 600, 600);
@@ -130,6 +132,29 @@ create_main_window (GtkUndo *undo)
 
   vbox = gtk_vbox_new (FALSE, 0);
   gtk_container_add (GTK_CONTAINER (win), vbox);
+
+  /* menu and toolbar */
+  action_group = gtk_action_group_new ("actiongroupname");
+  gtk_action_group_add_action (action_group, gtk_action_new ("EditMenu", "Edit", NULL, NULL));
+  gtk_action_group_add_action (action_group, gtk_undo_get_undo_action (undo));
+  gtk_action_group_add_action (action_group, gtk_undo_get_redo_action (undo));
+  ui_manager = gtk_ui_manager_new ();
+  gtk_ui_manager_insert_action_group (ui_manager, action_group, 0);
+  gtk_ui_manager_add_ui_from_string (ui_manager,
+      "<ui>"
+      "  <menubar name='MenuBar'>"
+      "    <menu action='EditMenu'>"
+      "      <menuitem action='" GTK_UNDO_UNDO_ACTION_NAME "'/>"
+      "      <menuitem action='" GTK_UNDO_REDO_ACTION_NAME "'/>"
+      "    </menu>"
+      "  </menubar>"
+      "  <toolbar name='ToolBar'>"
+      "    <toolitem action='" GTK_UNDO_UNDO_ACTION_NAME "'/>"
+      "    <toolitem action='" GTK_UNDO_REDO_ACTION_NAME "'/>"
+      "  </toolbar>"
+      "</ui>", -1, NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), gtk_ui_manager_get_widget (ui_manager, "/MenuBar"), FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (vbox), gtk_ui_manager_get_widget (ui_manager, "/ToolBar"), FALSE, FALSE, 0);
 
   /* buttons */
   button = gtk_button_new_with_label ("add with description");
@@ -174,6 +199,7 @@ create_main_window (GtkUndo *undo)
   gtk_box_pack_start (GTK_BOX (vbox), view, TRUE, TRUE, 0);
 
   gtk_widget_show_all (win);
+  g_object_unref (undo);
   return win;
 }
 
