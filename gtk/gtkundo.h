@@ -26,9 +26,12 @@
 #define __GTK_UNDO_H__
 
 #include <gtk/gtktreestore.h>
-
+#include <gtk/gtkaction.h>
 
 G_BEGIN_DECLS
+
+#define GTK_UNDO_UNDO_ACTION_NAME "gtkundoundoactionname"
+#define GTK_UNDO_REDO_ACTION_NAME "gtkundoredoactionname"
 
 /* Maximum size of text buffer, in bytes */
 #define GTK_UNDO_MAX_SIZE        G_MAXINT
@@ -128,6 +131,10 @@ guint    gtk_undo_get_group_depth (GtkUndo *undo);
 GtkTreeStore* gtk_undo_get_undo_descriptions (GtkUndo *undo);
 
 GtkTreeStore* gtk_undo_get_redo_descriptions (GtkUndo *undo);
+
+GtkAction* gtk_undo_get_undo_action (GtkUndo *undo);
+
+GtkAction* gtk_undo_get_redo_action (GtkUndo *undo);
 
 G_END_DECLS
 

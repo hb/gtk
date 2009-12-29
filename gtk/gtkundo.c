@@ -23,6 +23,7 @@
 #include "gtkintl.h"
 #include "gtkmarshalers.h"
 #include "gtkprivate.h"
+#include "gtkstock.h"
 
 
 /**
@@ -62,6 +63,9 @@ struct _GtkUndoPrivate
   gint redo_length;
   GHashTable *method_hash;
   guint group_depth;
+
+  GtkAction *undo_action;
+  GtkAction *redo_action;
 };
 
 typedef struct _GtkUndoEntry GtkUndoEntry;
@@ -71,6 +75,8 @@ struct _GtkUndoEntry {
   gpointer data;
 };
 
+#define GTK_UNDO_DEFAULT_UNDO_ACTION_LABEL "Undo"
+#define GTK_UNDO_DEFAULT_REDO_ACTION_LABEL "Redo"
 
 G_DEFINE_TYPE (GtkUndo, gtk_undo, G_TYPE_OBJECT);
 
@@ -98,10 +104,16 @@ change_len_undo (GtkUndo *undo, gint num)
 {
   undo->priv->undo_length = undo->priv->undo_length + num;
 
-  if ((num > 0) && (undo->priv->undo_length == 1))
+  if ((num > 0) && (undo->priv->undo_length == 1)) {
+    if (undo->priv->undo_action)
+      gtk_action_set_sensitive (undo->priv->undo_action, TRUE);
     g_signal_emit(undo, signals[CAN_UNDO], 0, TRUE);
-  else if ((num < 0) && (undo->priv->undo_length == 0))
+  }
+  else if ((num < 0) && (undo->priv->undo_length == 0)) {
+    if (undo->priv->undo_action)
+      gtk_action_set_sensitive (undo->priv->undo_action, FALSE);
     g_signal_emit(undo, signals[CAN_UNDO], 0, FALSE);
+  }
 }
 
 /* Change length of the redo stack */
@@ -110,10 +122,16 @@ change_len_redo(GtkUndo *undo, gint num)
 {
   undo->priv->redo_length = undo->priv->redo_length + num;
 
-  if ((num > 0) && (undo->priv->redo_length == 1))
+  if ((num > 0) && (undo->priv->redo_length == 1)) {
+    if (undo->priv->redo_action)
+      gtk_action_set_sensitive (undo->priv->redo_action, TRUE);
     g_signal_emit (undo, signals[CAN_REDO], 0, TRUE);
-  else if ((num < 0) && (undo->priv->redo_length == 0))
+  }
+  else if ((num < 0) && (undo->priv->redo_length == 0)) {
+    if (undo->priv->redo_action)
+      gtk_action_set_sensitive (undo->priv->redo_action, FALSE);
     g_signal_emit (undo, signals[CAN_REDO], 0, FALSE);
+  }
 }
 
 static gboolean
@@ -298,6 +316,36 @@ get_node_level (GNode *root, guint depth)
   return child;
 }
 
+static void
+set_action_label_to_topmost_description (GtkUndo *undo, gboolean is_undo)
+{
+  GList *stack;
+  GtkAction *action;
+  gchar *msg;
+
+  stack = (is_undo ? undo->priv->undo_stack : undo->priv->redo_stack);
+  action = (is_undo ? undo->priv->undo_action : undo->priv->redo_action);
+
+  /* do nothing if action is NULL. This can happen on object destruction */
+  if (!action)
+    return;
+
+  if (stack && stack->data) {
+    GNode *node;
+    node = stack->data;
+    if (node->data) {
+      msg = g_strconcat (is_undo ? GTK_UNDO_DEFAULT_UNDO_ACTION_LABEL : GTK_UNDO_DEFAULT_REDO_ACTION_LABEL, ": ", get_entry_description ((GtkUndoEntry*)node->data), NULL);
+      gtk_action_set_label (action, msg);
+      gtk_action_set_tooltip (action, msg);
+      g_free (msg);
+      return;
+    }
+  }
+  msg = (is_undo ? GTK_UNDO_DEFAULT_UNDO_ACTION_LABEL : GTK_UNDO_DEFAULT_REDO_ACTION_LABEL);
+  gtk_action_set_label (action, msg);
+  gtk_action_set_tooltip (action, msg);
+}
+
 /* --------------------------------------------------------------------------------
  *
  */
@@ -316,6 +364,32 @@ gtk_undo_init (GtkUndo *undo)
   pv->redo_length = 0;
   pv->method_hash = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, destroy_undoset);
   pv->group_depth = 0;
+
+  pv->undo_action = gtk_action_new (GTK_UNDO_UNDO_ACTION_NAME, N_(GTK_UNDO_DEFAULT_UNDO_ACTION_LABEL), NULL, GTK_STOCK_UNDO);
+  gtk_action_set_sensitive (pv->undo_action, FALSE);
+  g_signal_connect_swapped (G_OBJECT (pv->undo_action), "activate", G_CALLBACK (gtk_undo_undo), undo);
+
+  pv->redo_action = gtk_action_new (GTK_UNDO_REDO_ACTION_NAME, N_(GTK_UNDO_DEFAULT_REDO_ACTION_LABEL), NULL, GTK_STOCK_REDO);
+  gtk_action_set_sensitive (pv->redo_action, FALSE);
+  g_signal_connect_swapped (G_OBJECT (pv->redo_action), "activate", G_CALLBACK (gtk_undo_redo), undo);
+}
+
+static void
+gtk_undo_dispose (GObject *obj)
+{
+  GtkUndo *undo = GTK_UNDO (obj);
+
+  if (undo->priv->undo_action) {
+    g_object_unref (undo->priv->undo_action);
+    undo->priv->undo_action = NULL;
+  }
+
+  if (undo->priv->redo_action) {
+    g_object_unref (undo->priv->redo_action);
+    undo->priv->redo_action = NULL;
+  }
+
+  G_OBJECT_CLASS (gtk_undo_parent_class)->dispose (obj);
 }
 
 static void
@@ -372,6 +446,7 @@ gtk_undo_class_init (GtkUndoClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
   gobject_class->finalize = gtk_undo_finalize;
+  gobject_class->dispose = gtk_undo_dispose;
   gobject_class->set_property = gtk_undo_set_property;
   gobject_class->get_property = gtk_undo_get_property;
 
@@ -536,6 +611,7 @@ gtk_undo_add (GtkUndo *undo, const char *set_name, gpointer data, const gchar *d
     clear_redo (undo);
     if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
       free_last_entry (undo);
+    set_action_label_to_topmost_description(undo, TRUE);
     g_signal_emit (undo, signals[CHANGED], 0);
   }
   else {
@@ -584,6 +660,8 @@ gtk_undo_undo (GtkUndo *undo)
     free_first_entry (undo, TRUE);
     g_warning("undo operation failed\n");
   }
+  set_action_label_to_topmost_description(undo, TRUE);
+  set_action_label_to_topmost_description(undo, FALSE);
   g_signal_emit(undo, signals[CHANGED], 0);
   return TRUE;
 }
@@ -623,6 +701,8 @@ gtk_undo_redo (GtkUndo *undo)
     free_first_entry (undo, FALSE);
     g_warning ("redo operation failed\n");
   }
+  set_action_label_to_topmost_description(undo, TRUE);
+  set_action_label_to_topmost_description(undo, FALSE);
   g_signal_emit(undo, signals[CHANGED], 0);
   return TRUE;
 }
@@ -696,8 +776,10 @@ gtk_undo_set_max_length (GtkUndo *undo,
         something_changed = FALSE;
       while (undo->priv->undo_length > max_length)
         free_last_entry (undo);
-      if (something_changed)
+      if (something_changed) {
+        set_action_label_to_topmost_description(undo, TRUE);
         g_signal_emit (undo, signals[CHANGED], 0);
+      }
     }
     undo->priv->max_length = max_length;
     g_object_notify (G_OBJECT (undo), "max-length");
@@ -753,8 +835,11 @@ gtk_undo_clear (GtkUndo *undo)
   clear_undo (undo);
   clear_redo (undo);
 
-  if (something_changed)
+  if (something_changed) {
+    set_action_label_to_topmost_description(undo, TRUE);
+    set_action_label_to_topmost_description(undo, FALSE);
     g_signal_emit (undo, signals[CHANGED], 0);
+  }
   return TRUE;
 }
 
@@ -793,8 +878,10 @@ gtk_undo_start_group (GtkUndo *undo, const gchar *description)
 
   undo->priv->group_depth++;
   // if group add mode was just started, emit changed signal
-  if (undo->priv->group_depth == 1)
+  if (undo->priv->group_depth == 1) {
+    set_action_label_to_topmost_description(undo, TRUE);
     g_signal_emit (undo, signals[CHANGED], 0);
+  }
 }
 
 /**
@@ -815,6 +902,7 @@ gtk_undo_end_group (GtkUndo *undo)
     clear_redo (undo);
     if ((undo->priv->max_length != -1) && (undo->priv->undo_length > undo->priv->max_length))
       free_last_entry (undo);
+    set_action_label_to_topmost_description(undo, TRUE);
     g_signal_emit (undo, signals[CHANGED], 0);
   }
 }
@@ -885,4 +973,36 @@ gtk_undo_get_redo_descriptions (GtkUndo *undo)
 {
   g_return_val_if_fail (GTK_IS_UNDO (undo), NULL);
   return get_descriptions_from_stack (undo->priv->redo_stack);
+}
+
+/**
+ * gtk_undo_get_undo_action:
+ * @undo: a #GtkUndo
+ *
+ * Get a #GtkAction that represents an undo operation.
+ *
+ * Return value: A GtkAction for an undo operation.
+ *
+ * Since: 2.20
+ */
+GtkAction* gtk_undo_get_undo_action (GtkUndo *undo)
+{
+  g_object_ref (undo->priv->undo_action);
+  return undo->priv->undo_action;
+}
+
+/**
+ * gtk_undo_get_redo_action:
+ * @undo: a #GtkUndo
+ *
+ * Get a #GtkAction that represents a redo operation.
+ *
+ * Return value: A GtkAction for a redo operation.
+ *
+ * Since: 2.20
+ */
+GtkAction* gtk_undo_get_redo_action (GtkUndo *undo)
+{
+  g_object_ref (undo->priv->redo_action);
+  return undo->priv->redo_action;
 }
